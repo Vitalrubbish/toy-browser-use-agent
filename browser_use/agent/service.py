@@ -24,6 +24,7 @@ from browser_use.agent.cloud_events import (
 	UpdateAgentTaskEvent,
 )
 from browser_use.agent.message_manager.utils import save_conversation
+from browser_use.agent.memory import MemoryService  # 新增引用
 from browser_use.llm.base import BaseChatModel
 from browser_use.llm.exceptions import ModelProviderError, ModelRateLimitError
 from browser_use.llm.messages import BaseMessage, ContentPartImageParam, ContentPartTextParam, UserMessage
@@ -203,6 +204,8 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		loop_detection_enabled: bool = True,
 		llm_screenshot_size: tuple[int, int] | None = None,
 		_url_shortening_limit: int = 25,
+		use_memory: bool = False, # 新增参数开关
+        memory_file: str = "agent_memory.json", # 新增参数路径
 		**kwargs,
 	):
 		# Validate llm_screenshot_size
@@ -585,6 +588,8 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		# Event-based pause control (kept out of AgentState for serialization)
 		self._external_pause_event = asyncio.Event()
 		self._external_pause_event.set()
+		self.use_memory = use_memory
+		self.memory_service = MemoryService(storage_path=memory_file) if use_memory else None
 
 	def _enhance_task_with_schema(self, task: str, output_model_schema: type[AgentStructuredOutput] | None) -> str:
 		"""Enhance task description with output schema information if provided."""
@@ -2386,6 +2391,32 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		on_step_start: AgentHookFunc | None = None,
 		on_step_end: AgentHookFunc | None = None,
 	) -> AgentHistoryList[AgentStructuredOutput]:
+
+		"""search memory first and inject into system prompt if found"""
+		# === MEMORY RETRIEVAL START ===
+		if self.use_memory and self.memory_service:
+			relevant_memory = self.memory_service.retrieve_relevant_memory(self.task)
+			if relevant_memory:
+				# 将过去的经验格式化为文本
+				memory_text = (
+					f"\n\n=========== MEMORY RECALL ===========\n"
+					f"You have solved a similar task before provided below.\n"
+					f"User Task: {relevant_memory.task}\n"
+					f"Successful Action Sequence used:\n"
+				)
+				for idx, action in enumerate(relevant_memory.actions):
+					memory_text += f"{idx+1}. {str(action)}\n"
+				memory_text += "You may use this as a reference but adapt to the current page state.\n"
+				memory_text += "=====================================\n"
+				
+				# 注入到 extend_system_message
+				if self.settings.extend_system_message:
+					self.settings.extend_system_message += memory_text
+				else:
+					self.settings.extend_system_message = memory_text
+		# === MEMORY RETRIEVAL END ===
+
+
 		"""Execute the task with maximum number of steps"""
 
 		loop = asyncio.get_event_loop()
@@ -2489,6 +2520,23 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 				is_done = await self._execute_step(current_step, max_steps, step_info, on_step_start, on_step_end)
 
 				if is_done:
+					# === MEMORY SAVE START ===
+					if self.use_memory and self.memory_service and self.history.is_successful():
+						# 提取成功的动作序列 (简化版：提取所有动作，生产环境可能需要过滤 failed actions)
+						actions_to_save = []
+						for result in self.history.action_results():
+							# 这里的逻辑通过 history 对象获取 executed actions
+							# 假设我们可以从 history 中反向构建出 params
+							pass 
+						
+						# 更简单的获取方式：遍历 history.model_actions()
+						model_actions = self.history.model_actions()
+						# 过滤掉 None 或者无效步骤
+						clean_actions = [a for a in model_actions if a]
+						
+						self.memory_service.add_memory(self.task, clean_actions)
+					# === MEMORY SAVE END ===
+
 					# Agent has marked the task as done
 					if self._demo_mode_enabled and self.history.history:
 						final_result_text = self.history.final_result() or 'Task completed'
