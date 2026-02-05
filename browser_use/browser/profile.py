@@ -535,6 +535,21 @@ class ProxySettings(BaseModel):
 		return getattr(self, key)
 
 
+def _get_proxy_settings_from_env() -> ProxySettings | None:
+	"""Get proxy settings from environment variables."""
+	server = (
+		os.getenv('HTTPS_PROXY')
+		or os.getenv('HTTP_PROXY')
+		or os.getenv('https_proxy')
+		or os.getenv('http_proxy')
+	)
+	if server:
+		bypass = os.getenv('NO_PROXY') or os.getenv('no_proxy')
+		return ProxySettings(server=server, bypass=bypass)
+	return None
+
+
+
 class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, BrowserLaunchArgs, BrowserNewContextArgs):
 	"""
 	A BrowserProfile is a static template collection of kwargs that can be passed to:
@@ -595,7 +610,7 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 	# --- Proxy settings ---
 	# New consolidated proxy config (typed)
 	proxy: ProxySettings | None = Field(
-		default=None,
+		default_factory=_get_proxy_settings_from_env,
 		description='Proxy settings. Use browser_use.browser.profile.ProxySettings(server, bypass, username, password)',
 	)
 	enable_default_extensions: bool = Field(
