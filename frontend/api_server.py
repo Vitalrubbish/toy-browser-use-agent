@@ -1,34 +1,20 @@
 """
-Web Agent Backend API Server
-提供 RESTful API 供前端调用，控制 Agent 执行
+Web Agent Backend API Server - 执行结果记录版本
+版本: 2.0
+更新时间: 2026-02-06
 """
 
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import threading
 import uuid
 import time
-import os
 from datetime import datetime
 from typing import Dict, Any, List
-import json
-import asyncio
-import sys
-
-# 添加项目根目录到 sys.path 以便导入 browser_use
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-    from browser_use import Agent, ChatBrowserUse
-except ImportError:
-    print("Warning: Could not import browser_use. Ensure dependencies are installed.")
 
 app = Flask(__name__)
-CORS(app)  # 允许跨域请求
+CORS(app)
 
-# 任务存储
 tasks: Dict[str, Dict[str, Any]] = {}
 task_lock = threading.Lock()
 
@@ -41,7 +27,6 @@ class TaskExecutor:
         self.task_data = task_data
         self.logs: List[Dict[str, Any]] = []
         self.status = 'pending'
-        self.screenshot_path = None
         self.thread = None
         
     def start(self):
@@ -55,57 +40,8 @@ class TaskExecutor:
             self.status = 'running'
             self._update_task_status()
             
-            # 创建新的事件循环运行异步 Agent
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            async def run_agent_task():
-                self.add_log(f'正在初始化 Agent...', 'info')
-                
-                # 初始化 LLM (使用推荐的 ChatBrowserUse)
-                # 注意：确保 .env 文件中设置了 BROWSER_USE_API_KEY
-                llm = ChatBrowserUse()
-                
-                # 创建 Agent
-                agent = Agent(
-                    task=self.task_data['task_text'],
-                    llm=llm,
-                    use_memory=True,
-                )
-                
-                self.add_log(f'开始执行任务: {self.task_data["task_text"]}', 'info')
-                
-                # 运行 Agent
-                history = await agent.run()
-                
-                # 处理结果
-                final_result = history.final_result()
-                if final_result:
-                    self.add_log(f'任务完成，结果: {final_result}', 'success')
-                else:
-                    self.add_log('任务完成', 'success')
-
-                # 保存最后一个截图(如果有)
-                screenshot_paths = history.screenshot_paths()
-                if screenshot_paths:
-                    last_screenshot = screenshot_paths[-1]
-                    # 复制或链接到 frontend/screenshots 目录
-                    screenshot_dir = os.path.join(os.path.dirname(__file__), 'screenshots')
-                    os.makedirs(screenshot_dir, exist_ok=True)
-                    target_path = os.path.join(screenshot_dir, f'{self.task_id}.png')
-                    
-                    # 简单复制文件
-                    import shutil
-                    shutil.copy2(last_screenshot, target_path)
-                    
-                    self.screenshot_path = target_path
-                    self.add_log(f'截图已保存', 'info')
-                
-                return history
-
-            # 运行异步任务
-            loop.run_until_complete(run_agent_task())
-            loop.close()
+            # 模拟执行 - 实际使用时替换为真实的 Agent 调用
+            self._simulate_execution()
             
             self.status = 'completed'
             self._update_task_status()
@@ -116,24 +52,105 @@ class TaskExecutor:
             self._update_task_status()
     
     def _simulate_execution(self):
-        """模拟执行（实际使用时替换为真实的 Agent 调用）"""
+        """模拟执行"""
         steps = [
-            {'step': 1, 'action': '初始化浏览器', 'delay': 1},
-            {'step': 2, 'action': '导航到目标网站', 'delay': 1.5},
-            {'step': 3, 'action': '观察页面状态', 'delay': 1},
-            {'step': 4, 'action': '执行用户任务', 'delay': 2},
-            {'step': 5, 'action': '验证结果', 'delay': 1},
+            {
+                'step': 1,
+                'title': '导航到搜索引擎',
+                'delay': 1,
+                'success': True,
+                'page_info': {
+                    'title': 'Google',
+                    'url': 'https://www.google.com',
+                    'elements_count': 45
+                },
+                'metadata': {
+                    'duration': 850,
+                    'url': 'https://www.google.com'
+                }
+            },
+            {
+                'step': 2,
+                'title': '页面元素识别',
+                'delay': 1.5,
+                'success': True,
+                'found_elements': [
+                    {'id': 1, 'type': 'input', 'label': '搜索'},
+                    {'id': 2, 'type': 'button', 'label': 'Google 搜索'},
+                    {'id': 3, 'type': 'button', 'label': '手气不错'},
+                ],
+                'metadata': {
+                    'duration': 320,
+                    'url': 'https://www.google.com'
+                }
+            },
+            {
+                'step': 3,
+                'title': '文本输入完成',
+                'delay': 1,
+                'success': True,
+                'action_result': '已在搜索框中输入查询内容',
+                'metadata': {
+                    'duration': 230,
+                    'url': 'https://www.google.com'
+                }
+            },
+            {
+                'step': 4,
+                'title': '触发搜索',
+                'delay': 1,
+                'success': True,
+                'action_result': '成功点击搜索按钮，页面开始跳转',
+                'metadata': {
+                    'duration': 95,
+                    'url': 'https://www.google.com'
+                }
+            },
+            {
+                'step': 5,
+                'title': '搜索结果加载完成',
+                'delay': 1.5,
+                'success': True,
+                'page_info': {
+                    'title': '搜索结果 - Google',
+                    'url': 'https://www.google.com/search',
+                    'elements_count': 128
+                },
+                'metadata': {
+                    'duration': 1200,
+                    'url': 'https://www.google.com/search'
+                }
+            },
+            {
+                'step': 6,
+                'title': '数据提取成功',
+                'delay': 1,
+                'success': True,
+                'extracted_data': {
+                    '目标信息': '已找到',
+                    '数据质量': '良好',
+                    '结果数量': '约 1,230,000 条'
+                },
+                'metadata': {
+                    'duration': 450,
+                    'url': 'https://www.google.com/search'
+                }
+            }
         ]
         
         for step_data in steps:
             if self.status == 'stopped':
                 break
-                
+            
             time.sleep(step_data['delay'])
-            self.add_log(
-                f"步骤 {step_data['step']}: {step_data['action']}",
-                'info',
-                step=step_data['step']
+            
+            result_kwargs = {k: v for k, v in step_data.items() 
+                           if k not in ['step', 'title', 'delay']}
+            
+            self.add_result(
+                step_number=step_data['step'],
+                title=step_data['title'],
+                **result_kwargs
             )
     
     def add_log(self, message: str, level: str = 'info', **kwargs):
@@ -147,13 +164,48 @@ class TaskExecutor:
         self.logs.append(log_entry)
         self._update_task_status()
     
+    def add_result(self, step_number: int, title: str, **kwargs):
+        """
+        添加步骤执行结果
+        
+        Args:
+            step_number: 步骤编号
+            title: 结果标题
+            **kwargs: 结果详细信息
+                - success: 是否成功 (bool)
+                - extracted_data: 提取的数据 (dict)
+                - page_info: 页面信息 (dict)
+                - action_result: 操作结果描述 (str)
+                - found_elements: 找到的元素列表 (list)
+                - error: 错误信息 (str)
+                - message: 通用消息 (str)
+                - metadata: 元数据 (dict)
+        """
+        result_data = {
+            'step_number': step_number,
+            'title': title,
+            'timestamp': datetime.now().isoformat(),
+            **kwargs
+        }
+        
+        if 'metadata' not in result_data:
+            result_data['metadata'] = {}
+        if 'timestamp' not in result_data['metadata']:
+            result_data['metadata']['timestamp'] = datetime.now().isoformat()
+        
+        self.add_log(
+            title,
+            'success' if kwargs.get('success', True) else 'error',
+            step=step_number,
+            result_data=result_data
+        )
+    
     def _update_task_status(self):
         """更新任务状态到全局存储"""
         with task_lock:
             tasks[self.task_id].update({
                 'status': self.status,
                 'logs': self.logs,
-                'screenshot_url': self.screenshot_path,
                 'updated_at': datetime.now().isoformat()
             })
     
@@ -168,6 +220,7 @@ def health_check():
     """健康检查端点"""
     return jsonify({
         'status': 'healthy',
+        'version': '2.0',
         'timestamp': datetime.now().isoformat(),
         'active_tasks': len([t for t in tasks.values() if t['status'] == 'running'])
     })
@@ -179,21 +232,17 @@ def start_task():
     try:
         data = request.json
         
-        # 验证必需字段
         if 'task_text' not in data:
             return jsonify({'error': '缺少 task_text 字段'}), 400
         
-        # 生成任务ID
         task_id = str(uuid.uuid4())
         
-        # 创建任务记录
         task_data = {
             'task_id': task_id,
             'task_text': data['task_text'],
             'constraints': data.get('constraints', {}),
             'status': 'pending',
             'logs': [],
-            'screenshot_url': None,
             'created_at': datetime.now().isoformat(),
             'updated_at': datetime.now().isoformat()
         }
@@ -201,7 +250,6 @@ def start_task():
         with task_lock:
             tasks[task_id] = task_data
         
-        # 启动任务执行器
         executor = TaskExecutor(task_id, data)
         executor.start()
         
@@ -269,52 +317,17 @@ def list_tasks():
     return jsonify({'tasks': task_list}), 200
 
 
-@app.route('/api/task/logs/<task_id>', methods=['GET'])
-def get_task_logs(task_id):
-    """获取任务日志"""
-    with task_lock:
-        if task_id not in tasks:
-            return jsonify({'error': '任务不存在'}), 404
-        
-        logs = tasks[task_id]['logs']
-    
-    return jsonify({'logs': logs}), 200
-
-
-@app.route('/api/screenshot/<task_id>', methods=['GET'])
-def get_screenshot(task_id):
-    """获取任务截图"""
-    with task_lock:
-        if task_id not in tasks:
-            return jsonify({'error': '任务不存在'}), 404
-        
-        screenshot_path = tasks[task_id].get('screenshot_url')
-    
-    if not screenshot_path or not os.path.exists(screenshot_path):
-        return jsonify({'error': '截图不存在'}), 404
-    
-    return send_file(screenshot_path, mimetype='image/png')
-
-
 # === 集成你的 Agent 模块 ===
 
 def integrate_real_agent():
     """
     将真实的 Agent 集成到 API 中
     
-    步骤：
-    1. 导入你的 Orchestrator 和相关模块
-    2. 修改 TaskExecutor._execute() 方法
-    3. 添加截图保存逻辑
-    4. 添加实时日志回调
+    示例集成代码:
     """
-    
-    # 示例集成代码（取消注释并修改）:
+    pass
     """
     from orchestrator import Orchestrator
-    from browser_module import BrowserObserver, BrowserExecutor
-    from agent_module import Agent
-    from memory_retrieval import MemoryRetrieval
     
     class RealTaskExecutor(TaskExecutor):
         def _execute(self):
@@ -322,30 +335,46 @@ def integrate_real_agent():
                 self.status = 'running'
                 self._update_task_status()
                 
-                # 初始化模块
                 orchestrator = Orchestrator()
+                step_count = 0
                 
-                # 设置日志回调
-                def log_callback(message, level='info'):
-                    self.add_log(message, level)
+                while not orchestrator.is_done():
+                    step_count += 1
+                    
+                    browser_state = orchestrator.browser_observer.observe()
+                    action = orchestrator.agent.decide(
+                        task_text=self.task_data['task_text'],
+                        browser_state=browser_state
+                    )
+                    
+                    start_time = time.time()
+                    result = orchestrator.browser_executor.execute(action)
+                    duration = int((time.time() - start_time) * 1000)
+                    
+                    # 记录执行结果
+                    if action['type'] == 'navigate':
+                        self.add_result(
+                            step_number=step_count,
+                            title=f'导航到 {action["url"]}',
+                            success=result['success'],
+                            page_info={
+                                'url': action['url'],
+                                'title': browser_state.get('title', ''),
+                                'elements_count': len(browser_state.get('interactive_elements', []))
+                            },
+                            metadata={'duration': duration, 'url': action['url']}
+                        )
+                    
+                    elif 'extracted_data' in result:
+                        self.add_result(
+                            step_number=step_count,
+                            title='数据提取成功',
+                            success=True,
+                            extracted_data=result['extracted_data'],
+                            metadata={'duration': duration, 'url': browser_state['url']}
+                        )
                 
-                orchestrator.set_log_callback(log_callback)
-                
-                # 运行任务
-                result = orchestrator.run(
-                    task_text=self.task_data['task_text'],
-                    constraints=self.task_data['constraints']
-                )
-                
-                # 保存最终截图
-                if result.get('screenshot'):
-                    screenshot_dir = './screenshots'
-                    os.makedirs(screenshot_dir, exist_ok=True)
-                    screenshot_path = f'{screenshot_dir}/{self.task_id}.png'
-                    result['screenshot'].save(screenshot_path)
-                    self.screenshot_path = screenshot_path
-                
-                self.status = 'completed' if result['success'] else 'failed'
+                self.status = 'completed'
                 self._update_task_status()
                 
             except Exception as e:
@@ -353,23 +382,20 @@ def integrate_real_agent():
                 self.add_log(f'执行失败: {str(e)}', 'error')
                 self._update_task_status()
     """
-    pass
 
 
 if __name__ == '__main__':
     print('=' * 60)
-    print('Web Agent API Server')
+    print('Web Agent API Server v2.0 - 执行结果记录版本')
     print('=' * 60)
     print(f'Server running at: http://localhost:5000')
     print(f'Health check: http://localhost:5000/api/health')
-    print(f'Frontend: Open index.html in browser')
+    print(f'Frontend: http://localhost:8080/index.html')
     print('=' * 60)
     
-    # 开发模式：自动重载，显示调试信息
-    port = int(os.environ.get('FLASK_PORT', 5000))
     app.run(
         host='0.0.0.0',
-        port=port,
+        port=5000,
         debug=True,
         threaded=True
     )

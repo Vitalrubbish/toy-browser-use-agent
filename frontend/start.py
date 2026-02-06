@@ -155,10 +155,8 @@ def start_http_server(port=8080):
     print_info(f"启动前端服务器 (端口 {port})...")
     
     try:
-        frontend_dir = Path(__file__).parent
         process = subprocess.Popen(
             [sys.executable, '-m', 'http.server', str(port)],
-            cwd=str(frontend_dir),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
